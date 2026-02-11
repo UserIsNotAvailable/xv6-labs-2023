@@ -377,7 +377,7 @@ exit(int status)
 
   p->xstate = status;
   p->state = ZOMBIE;
-
+  alarm_cancel();
   release(&wait_lock);
 
   // Jump into the scheduler, never to return.

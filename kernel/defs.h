@@ -9,6 +9,13 @@ struct sleeplock;
 struct stat;
 struct superblock;
 
+// alarm.c
+void            alarm_init(void);
+int             alarm_set(int, uint64);
+int             alarm_cancel(void);
+void            alarm_process(void);
+uint64          alarm_return(void);
+
 // bio.c
 void            binit(void);
 struct buf*     bread(uint, uint);

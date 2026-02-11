@@ -92,3 +92,24 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+
+uint64 sys_sigalarm(void)
+{
+  int ticks;
+  uint64 handler;
+
+  argint(0, &ticks);
+  argaddr(1, &handler);
+
+  if (0 > ticks)
+    return -1;
+
+  if (0 == ticks && 0 == handler)
+    return alarm_cancel();
+  return alarm_set(ticks, handler);
+}
+
+uint64 sys_sigreturn(void)
+{
+    return alarm_return();
+}
