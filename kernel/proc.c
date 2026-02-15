@@ -48,7 +48,7 @@ void
 procinit(void)
 {
   struct proc *p;
-  
+
   initlock(&pid_lock, "nextpid");
   initlock(&wait_lock, "wait_lock");
   for(p = proc; p < &proc[NPROC]; p++) {
@@ -93,7 +93,7 @@ int
 allocpid()
 {
   int pid;
-  
+
   acquire(&pid_lock);
   pid = nextpid;
   nextpid = nextpid + 1;
@@ -122,7 +122,12 @@ allocproc(void)
   return 0;
 
 found:
-  p->pid = allocpid();
+  if ((p->usyscall = (struct usyscall *) kalloc()) == 0) {
+    freeproc(p);
+    release(&p->lock);
+    return 0;
+  }
+  p->usyscall->pid = allocpid();
   p->state = USED;
 
   // Allocate a trapframe page.
@@ -155,6 +160,9 @@ found:
 static void
 freeproc(struct proc *p)
 {
+  if (p->usyscall)
+    kfree((void *) p->usyscall);
+  p->usyscall = 0;
   if(p->trapframe)
     kfree((void*)p->trapframe);
   p->trapframe = 0;
@@ -162,7 +170,6 @@ freeproc(struct proc *p)
     proc_freepagetable(p->pagetable, p->sz);
   p->pagetable = 0;
   p->sz = 0;
-  p->pid = 0;
   p->parent = 0;
   p->name[0] = 0;
   p->chan = 0;
@@ -202,6 +209,14 @@ proc_pagetable(struct proc *p)
     return 0;
   }
 
+  if (mappages(pagetable, USYSCALL, PGSIZE,
+               (uint64) (p->usyscall), PTE_R | PTE_U) < 0) {
+    uvmunmap(pagetable, TRAMPOLINE, 1, 0);
+    uvmunmap(pagetable, TRAPFRAME, 1, 0);
+    uvmfree(pagetable, 0);
+    return 0;
+  }
+
   return pagetable;
 }
 
@@ -212,6 +227,7 @@ proc_freepagetable(pagetable_t pagetable, uint64 sz)
 {
   uvmunmap(pagetable, TRAMPOLINE, 1, 0);
   uvmunmap(pagetable, TRAPFRAME, 1, 0);
+  uvmunmap(pagetable, USYSCALL, 1, 0);
   uvmfree(pagetable, sz);
 }
 
@@ -236,7 +252,7 @@ userinit(void)
 
   p = allocproc();
   initproc = p;
-  
+
   // allocate one user page and copy initcode's instructions
   // and data into it.
   uvmfirst(p->pagetable, initcode, sizeof(initcode));
@@ -310,7 +326,7 @@ fork(void)
 
   safestrcpy(np->name, p->name, sizeof(p->name));
 
-  pid = np->pid;
+  pid = np->usyscall->pid;
 
   release(&np->lock);
 
@@ -372,7 +388,7 @@ exit(int status)
 
   // Parent might be sleeping in wait().
   wakeup(p->parent);
-  
+
   acquire(&p->lock);
 
   p->xstate = status;
@@ -407,7 +423,7 @@ wait(uint64 addr)
         havekids = 1;
         if(pp->state == ZOMBIE){
           // Found one.
-          pid = pp->pid;
+          pid = pp->usyscall->pid;
           if(addr != 0 && copyout(p->pagetable, addr, (char *)&pp->xstate,
                                   sizeof(pp->xstate)) < 0) {
             release(&pp->lock);
@@ -428,7 +444,7 @@ wait(uint64 addr)
       release(&wait_lock);
       return -1;
     }
-    
+
     // Wait for a child to exit.
     sleep(p, &wait_lock);  //DOC: wait-sleep
   }
@@ -541,7 +557,7 @@ void
 sleep(void *chan, struct spinlock *lk)
 {
   struct proc *p = myproc();
-  
+
   // Must acquire p->lock in order to
   // change p->state and then call sched.
   // Once we hold p->lock, we can be
@@ -594,7 +610,7 @@ kill(int pid)
 
   for(p = proc; p < &proc[NPROC]; p++){
     acquire(&p->lock);
-    if(p->pid == pid){
+    if (p->usyscall->pid == pid) {
       p->killed = 1;
       if(p->state == SLEEPING){
         // Wake process from sleep().
@@ -620,7 +636,7 @@ int
 killed(struct proc *p)
 {
   int k;
-  
+
   acquire(&p->lock);
   k = p->killed;
   release(&p->lock);
@@ -682,7 +698,7 @@ procdump(void)
       state = states[p->state];
     else
       state = "???";
-    printf("%d %s %s", p->pid, state, p->name);
+    printf("%d %s %s", p->usyscall->pid, state, p->name);
     printf("\n");
   }
 }
