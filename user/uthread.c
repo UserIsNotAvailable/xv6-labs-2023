@@ -10,14 +10,33 @@
 #define STACK_SIZE  8192
 #define MAX_THREAD  4
 
+struct thread_context {
+  uint64 x1; // ra
 
+  // callee saved
+  uint64 x2; // sp
+  uint64 x8;
+  uint64 x9;
+  uint64 x18;
+  uint64 x19;
+  uint64 x20;
+  uint64 x21;
+  uint64 x22;
+  uint64 x23;
+  uint64 x24;
+  uint64 x25;
+  uint64 x26;
+  uint64 x27;
+};
 struct thread {
   char       stack[STACK_SIZE]; /* the thread's stack */
   int        state;             /* FREE, RUNNING, RUNNABLE */
+  struct thread_context ctx;
 };
 struct thread all_thread[MAX_THREAD];
 struct thread *current_thread;
-extern void thread_switch(uint64, uint64);
+
+extern void thread_switch(struct thread_context *, struct thread_context *);
               
 void 
 thread_init(void)
@@ -56,15 +75,12 @@ thread_schedule(void)
     next_thread->state = RUNNING;
     t = current_thread;
     current_thread = next_thread;
-    /* YOUR CODE HERE
-     * Invoke thread_switch to switch from t to next_thread:
-     * thread_switch(??, ??);
-     */
+    thread_switch(&t->ctx, &current_thread->ctx);
   } else
     next_thread = 0;
 }
 
-void 
+void
 thread_create(void (*func)())
 {
   struct thread *t;
@@ -72,8 +88,26 @@ thread_create(void (*func)())
   for (t = all_thread; t < all_thread + MAX_THREAD; t++) {
     if (t->state == FREE) break;
   }
+  if (all_thread + MAX_THREAD == t) {
+    printf("all_thread + MAX_THREAD == t\n");
+    exit(-1);
+  }
+
   t->state = RUNNABLE;
-  // YOUR CODE HERE
+  t->ctx.x1 = (uint64) func;
+  t->ctx.x2 = (uint64) t->stack + STACK_SIZE;
+  t->ctx.x8 = 0;
+  t->ctx.x9 = 0;
+  t->ctx.x18 = 0;
+  t->ctx.x19 = 0;
+  t->ctx.x20 = 0;
+  t->ctx.x21 = 0;
+  t->ctx.x22 = 0;
+  t->ctx.x23 = 0;
+  t->ctx.x24 = 0;
+  t->ctx.x25 = 0;
+  t->ctx.x26 = 0;
+  t->ctx.x27 = 0;
 }
 
 void 
