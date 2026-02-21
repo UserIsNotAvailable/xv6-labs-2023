@@ -14,6 +14,7 @@ struct entry {
   struct entry *next;
 };
 struct entry *table[NBUCKET];
+pthread_mutex_t mutex[NBUCKET];
 int keys[NKEYS];
 int nthread = 1;
 
@@ -41,6 +42,10 @@ void put(int key, int value)
 {
   int i = key % NBUCKET;
 
+  if (0 != pthread_mutex_lock(&mutex[i])) {
+    perror("put: 0 != pthread_mutex_lock(&mutex[i])");
+    exit(EXIT_FAILURE);
+  }
   // is the key already present?
   struct entry *e = 0;
   for (e = table[i]; e != 0; e = e->next) {
@@ -54,7 +59,10 @@ void put(int key, int value)
     // the new is new.
     insert(key, value, &table[i], table[i]);
   }
-
+  if (0 != pthread_mutex_unlock(&mutex[i])) {
+    perror("put: 0 != pthread_mutex_unlock(&mutex[i])");
+    exit(EXIT_FAILURE);
+  }
 }
 
 static struct entry*
@@ -62,12 +70,18 @@ get(int key)
 {
   int i = key % NBUCKET;
 
-
+  if (0 != pthread_mutex_lock(&mutex[i])) {
+    perror("get: 0 != pthread_mutex_lock(&mutex[i])");
+    exit(EXIT_FAILURE);
+  }
   struct entry *e = 0;
   for (e = table[i]; e != 0; e = e->next) {
     if (e->key == key) break;
   }
-
+  if (0 != pthread_mutex_unlock(&mutex[i])) {
+    perror("get: 0 != pthread_mutex_unlock(&mutex[i])");
+    exit(EXIT_FAILURE);
+  }
   return e;
 }
 
@@ -118,6 +132,12 @@ main(int argc, char *argv[])
     keys[i] = random();
   }
 
+  for (int i = 0; i < NBUCKET; ++i)
+    if (0 != pthread_mutex_init(&mutex[i], NULL)) {
+      perror("main: 0 != pthread_mutex_init(&mutex[i], NULL)");
+      exit(EXIT_FAILURE);
+    }
+
   //
   // first the puts
   //
@@ -147,4 +167,5 @@ main(int argc, char *argv[])
 
   printf("%d gets, %.3f seconds, %.0f gets/second\n",
          NKEYS*nthread, t1 - t0, (NKEYS*nthread) / (t1 - t0));
+  return 0;
 }
