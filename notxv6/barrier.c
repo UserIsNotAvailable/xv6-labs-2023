@@ -22,15 +22,22 @@ barrier_init(void)
   bstate.nthread = 0;
 }
 
-static void 
+static void
 barrier()
 {
-  // YOUR CODE HERE
-  //
-  // Block until all threads have called barrier() and
-  // then increment bstate.round.
-  //
-  
+  assert(0 == pthread_mutex_lock(&bstate.barrier_mutex));
+  ++bstate.nthread;
+  int round = bstate.round;
+
+  if (nthread > bstate.nthread)
+    while (round == bstate.round)
+      assert(0 == pthread_cond_wait(&bstate.barrier_cond, &bstate.barrier_mutex));
+  else {
+    bstate.nthread = 0;
+    ++bstate.round;
+    assert(0 == pthread_cond_broadcast(&bstate.barrier_cond));
+  }
+  assert(0 == pthread_mutex_unlock(&bstate.barrier_mutex));
 }
 
 static void *
@@ -75,4 +82,5 @@ main(int argc, char *argv[])
     assert(pthread_join(tha[i], &value) == 0);
   }
   printf("OK; passed\n");
+  return 0;
 }
